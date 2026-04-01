@@ -72,11 +72,21 @@ def predict_properties_dual(smiles, peg):
             ]
             X_input = np.array([features])
             
-            # Model 1: ทำนาย Efficacy (logBB)
+        # Model 1: ทำนาย Efficacy (logBB)
             logbb = float(xgb_bbb.predict(X_input)[0])
-            # กฎฟิสิกส์อนุภาค: ปรับจูนด้วย PEG Dilemma 
+            
+            # --- 🛠️ ใส่ Hybrid Expert Rules (ปรับแก้ Bias ของ AI) ---
+            # 1. กฎฟิสิกส์อนุภาค: ปรับจูนด้วย PEG Dilemma 
             if peg == "PEG-2000": logbb += 0.2 
             elif peg == "PEG-3000": logbb -= 0.3
+            
+            # 2. กฎชีววิทยานาโน: ลงโทษหางไขมันที่ยาวเกินไป (Liver Trapping / Rigidity)
+            # AI (B3DB) มักให้คะแนน LogP สูงผิดปกติกับ LNP เราจึงต้องตบสติมัน
+            if tail_len > 15:
+                # ยิ่งหางยาวกว่า 15 ยิ่งโดนหักคะแนนหนักขึ้นเรื่อยๆ
+                penalty = (tail_len - 15) * 0.25
+                logbb -= penalty
+            # --------------------------------------------------------
                 
             # Model 2: ทำนาย Toxicity (Clinical Safety)
             # ดึงค่าความน่าจะเป็นที่สารนี้จะเป็นพิษ (คลาส 1) แล้วคูณ 100 ให้เป็นเปอร์เซ็นต์
