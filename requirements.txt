@@ -3,3 +3,5 @@ pandas
 numpy
 rdkit
 py3Dmol
+xgboost
+scikit-learn
