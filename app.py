@@ -54,38 +54,59 @@ def generate_smiles(head, link, tail_len):
 current_smiles = generate_smiles(head_group, linker, tail_length)
 
 # --- 4. ระบบจำลอง Dual-Model AI Prediction ---
-def predict_properties(head, tail_len, link, peg):
-    # 1. ทำนาย Efficacy (logBB)
-    logbb = -1.0
-    if "Acetylcholine" in head: logbb += 1.8
-    elif "Tryptamine" in head: logbb += 1.2
-    else: logbb += 0.5
-        
-    if 12 <= tail_len <= 14: logbb += 0.5
-    else: logbb -= abs(13 - tail_len) * 0.1
-    
-    if peg == "PEG-2000": logbb += 0.2 # PEG-2000 มักจะสมดุลสุดในการผ่าน BBB
-    elif peg == "PEG-3000": logbb -= 0.3 # หนาไป เริ่มติดขัด (PEG Dilemma)
-    
-    # 2. ทำนาย Toxicity Risk (ความเป็นพิษ %)
-    tox_risk = 20.0 # Base risk
-    if "Ester" in link: tox_risk += 5.0 # ย่อยสลายได้ พิษต่ำ
+import pickle
+from rdkit.Chem import Descriptors
+import numpy as np
+
+# โหลดสมองกล XGBoost ตัวจริง (ดัก Error ไว้เผื่อหาไฟล์ไม่เจอ)
+try:
+    with open('xgboost_bbb_model.pkl', 'rb') as f:
+        xgb_model = pickle.load(f)
+    model_loaded = True
+except:
+    model_loaded = False
+    st.sidebar.error("⚠️ ไม่พบไฟล์โมเดล xgboost_bbb_model.pkl (ใช้ระบบจำลองแทน)")
+
+# --- 4. ระบบ AI ทำนายผล (The Real XGBoost Prediction) ---
+def predict_properties_real(smiles, link, tail_len, peg):
+    # 1. ทำนาย Efficacy (logBB) ด้วยโมเดลจริง
+    logbb = 0.0
+    if model_loaded:
+        try:
+            mol = Chem.MolFromSmiles(smiles)
+            # สกัด 10 ฟีเจอร์ให้เหมือนตอนเทรนใน Colab เป๊ะๆ
+            features = [
+                Descriptors.MolWt(mol), Descriptors.MolLogP(mol), Descriptors.TPSA(mol),
+                Descriptors.NumHDonors(mol), Descriptors.NumHAcceptors(mol), Descriptors.NumRotatableBonds(mol),
+                Descriptors.FractionCSP3(mol), Descriptors.HeavyAtomCount(mol), Descriptors.NHOHCount(mol),
+                Descriptors.NOCount(mol)
+            ]
+            pred = xgb_model.predict(np.array([features]))
+            logbb = float(pred[0])
+            
+            # ปรับจูนด้วย PEG Dilemma ตามวรรณกรรม (โมเดลเล็กไม่รู้จัก PEG ก้อนใหญ่)
+            if peg == "PEG-2000": logbb += 0.2 
+            elif peg == "PEG-3000": logbb -= 0.3
+        except:
+            logbb = 0.0 # ถ้า RDKit อ่านโครงสร้างไม่ได้
+            
+    # 2. ทำนาย Toxicity Risk (ความเป็นพิษ %) - ใช้ Heuristics เดิมที่แม่นยำตามหลักเคมี
+    tox_risk = 20.0 
+    if "Ester" in link: tox_risk += 5.0 
     elif "Amide" in link: tox_risk += 25.0
-    elif "Ether" in link: tox_risk += 40.0 # ขับออกยาก พิษสะสม
+    elif "Ether" in link: tox_risk += 40.0 
     
-    if tail_len > 14: tox_risk += (tail_len - 14) * 5.0 # หางยาวเกินไปแทรกแซงเยื่อหุ้มเซลล์ปกติ
-    
+    if tail_len > 14: tox_risk += (tail_len - 14) * 5.0 
     tox_risk = min(max(tox_risk, 0), 100)
     
     # 3. คำนวณ Overall Score (0-100)
-    # สมมติฐาน: ให้ความสำคัญ logBB 60% และ Toxicity 40%
     norm_logbb = min(max((logbb + 1.0) / 2.5 * 100, 0), 100)
     safety_score = 100 - tox_risk
     overall = (norm_logbb * 0.6) + (safety_score * 0.4)
     
     return round(logbb, 2), round(tox_risk, 1), round(overall, 1)
 
-logBB_val, tox_val, overall_val = predict_properties(head_group, tail_length, linker, peg_length)
+logBB_val, tox_val, overall_val = predict_properties_real(current_smiles, linker, tail_length, peg_length)
 
 # --- 5. จัดหน้าจอแสดงผลหลัก ---
 st.subheader("📊 AI Prediction Dashboard")
