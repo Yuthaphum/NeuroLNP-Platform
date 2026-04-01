@@ -109,7 +109,9 @@ st.markdown("---")
 col1, col2 = st.columns([1.2, 1])
 
 with col1:
-    st.subheader("🧩 3D Molecular Viewer")
+    st.subheader("🧩 3D Structure (Targeting Lipid Monomer)")
+    st.info("💡 ภาพนี้แสดงโครงสร้าง 3 มิติของ 'โมเลกุลไขมันมุ่งเป้า (Monomer)' แบบเดี่ยวๆ ซึ่งในกระบวนการผลิตจริง โมเลกุลเหล่านี้นับพันตัวจะเกิดการรวมตัวกันเอง (Self-assembly) กลายเป็น 'อนุภาคนาโนทรงกลม (Spherical LNP)' ขนาด ~100 nm เพื่อหุ้มยาต่อไป")
+    
     def render_3d(smiles):
         try:
             mol = Chem.MolFromSmiles(smiles)
